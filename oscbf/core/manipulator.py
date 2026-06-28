@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from oscbf.utils.urdf_parser import parse_urdf
+from oscbf.parsers.mjcf_parser import parse_mjcf
 from oscbf.assets import ASSETS_DIR
 from oscbf.core.franka_collision_model import (
     franka_collision_data,
@@ -278,41 +279,14 @@ class Manipulator:
         ) = self._process_collision_data(collision_positions, collision_radii)
 
     @classmethod
-    def from_urdf(
+    def _from_data(
         cls,
-        urdf_filename: str,
-        ee_offset: Optional[ArrayLike] = None,
-        collision_data: Optional[dict] = None,
-        self_collision_data: Optional[dict] = None,
-        base_self_collision_data: Optional[dict] = None,
+        data: dict,
+        ee_offset: Optional[ArrayLike],
+        collision_data: Optional[dict],
+        self_collision_data: Optional[dict],
+        base_self_collision_data: Optional[dict],
     ) -> "Manipulator":
-        """Construct a Manipulator object from a parsed URDF file
-
-        Note: the URDF should only contain joints that are part of the kinematic chain and thus
-        are going to be actively controlled. All other joints should be set to "fixed" so that their
-        kinematics and dynamics properties are merged into the chain.
-
-        Args:
-            urdf_filename (str): Path to the URDF file
-            ee_offset (ArrayLike, optional): End-effector / tool-center-point transformation
-                from the last joint frame, shape (4, 4). Defaults to None.
-            collision_data (dict, optional): Collision geometry for each link, stored as a dictionary
-                where data["positions"] => list of sphere center points in each link frame, and
-                data["radii"] => list of sphere radii for each body. Defaults to None.
-            self_collision_data (dict, optional): Self collision geometry for each link, stored as a dictionary
-                where data["positions"] => list of sphere center points in each link frame,
-                data["radii"] => list of sphere radii for each body, and
-                data["pairs"] => list of pairs of collision sphere indices to consider. Defaults to None.
-            base_self_collision_data (dict, optional): Self collision geometry for the base, stored as a dictionary
-                where data["position"] => sphere center point for base sphere,
-                data["radius"] => radius of base sphere, and
-                data["indices"] => indices of spheres in the self collision model to pair with the base. Defaults to None.
-
-        Returns:
-            Manipulator: The manipulator object constructed from the URDF
-        """
-
-        data = parse_urdf(urdf_filename)
         data = {k: tuplify(v) for k, v in data.items()}
 
         assert isinstance(collision_data, dict) or collision_data is None
@@ -379,6 +353,64 @@ class Manipulator:
             base_self_collision_position=base_self_collision_position,
             base_self_collision_radius=base_self_collision_radius,
             base_self_collision_idxs=base_self_collision_idxs,
+        )
+
+    @classmethod
+    def from_urdf(
+        cls,
+        urdf_filename: str,
+        ee_offset: Optional[ArrayLike] = None,
+        collision_data: Optional[dict] = None,
+        self_collision_data: Optional[dict] = None,
+        base_self_collision_data: Optional[dict] = None,
+    ) -> "Manipulator":
+        """Construct a Manipulator object from a parsed URDF file
+
+        Note: the URDF should only contain joints that are part of the kinematic chain and thus
+        are going to be actively controlled. All other joints should be set to "fixed" so that their
+        kinematics and dynamics properties are merged into the chain.
+
+        Args:
+            urdf_filename (str): Path to the URDF file
+            ee_offset (ArrayLike, optional): End-effector / tool-center-point transformation
+                from the last joint frame, shape (4, 4). Defaults to None.
+            collision_data (dict, optional): Collision geometry for each link, stored as a dictionary
+                where data["positions"] => list of sphere center points in each link frame, and
+                data["radii"] => list of sphere radii for each body. Defaults to None.
+            self_collision_data (dict, optional): Self collision geometry for each link, stored as a dictionary
+                where data["positions"] => list of sphere center points in each link frame,
+                data["radii"] => list of sphere radii for each body, and
+                data["pairs"] => list of pairs of collision sphere indices to consider. Defaults to None.
+            base_self_collision_data (dict, optional): Self collision geometry for the base, stored as a dictionary
+                where data["position"] => sphere center point for base sphere,
+                data["radius"] => radius of base sphere, and
+                data["indices"] => indices of spheres in the self collision model to pair with the base. Defaults to None.
+
+        Returns:
+            Manipulator: The manipulator object constructed from the URDF
+        """
+        return cls._from_data(
+            parse_urdf(urdf_filename),
+            ee_offset, collision_data, self_collision_data, base_self_collision_data,
+        )
+
+    @classmethod
+    def from_mjcf(
+        cls,
+        mjcf_filename: str,
+        ee_offset: Optional[ArrayLike] = None,
+        collision_data: Optional[dict] = None,
+        self_collision_data: Optional[dict] = None,
+        base_self_collision_data: Optional[dict] = None,
+    ) -> "Manipulator":
+        """Construct a Manipulator from a MuJoCo MJCF .xml file.
+
+        Accepts the same optional arguments as from_urdf.
+        Ball, free, and freejoint joints are skipped.
+        """
+        return cls._from_data(
+            parse_mjcf(mjcf_filename),
+            ee_offset, collision_data, self_collision_data, base_self_collision_data,
         )
 
     def _process_collision_data(
